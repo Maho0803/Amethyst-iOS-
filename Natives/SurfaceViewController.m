@@ -100,9 +100,9 @@ static GameSurfaceView* pojavWindow;
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)];
     if (@available(iOS 15.0, tvOS 15.0, *)) {
         if(getPrefBool(@"video.max_framerate")) {
-            displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30, 120, 120);
+            displayLink.preferredFrameRateRange = CAFrameRateRangeMake(60, 120, 120);
         } else {
-            displayLink.preferredFrameRateRange = CAFrameRateRangeMake(30, 60, 60);
+            displayLink.preferredFrameRateRange = CAFrameRateRangeMake(60, 60, 60);
         }
     }
     [displayLink addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
