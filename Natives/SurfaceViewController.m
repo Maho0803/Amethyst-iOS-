@@ -379,8 +379,9 @@ static GameSurfaceView* pojavWindow;
     resolutionScale = getPrefFloat(@"video.resolution") / 100.0;
     // ANGLE sizes its drawable from bounds * contentsScale and ignores drawableSize, MoltenVK compares the two
     ame_renderer_t renderer = ame_renderer_from_name(getenv("AME_RENDERER"));
-    BOOL vulkanNative = ame_renderer_is_vulkan_native(renderer) || AMVulkanNativeActive();
-    CGFloat targetScale = scaledByLayer ? self.screenScale * resolutionScale : self.screenScale;
+BOOL vulkanNative = ame_renderer_is_vulkan_native(renderer) || AMVulkanNativeActive();
+BOOL scaledByLayer = ame_renderer_uses_angle(renderer) || vulkanNative;
+CGFloat targetScale = scaledByLayer ? self.screenScale * resolutionScale : self.screenScale;
 self.surfaceView.contentScaleFactor = targetScale;
 self.surfaceView.layer.contentsScale = targetScale;
     physicalWidth = roundf(self.surfaceView.frame.size.width * self.screenScale);
