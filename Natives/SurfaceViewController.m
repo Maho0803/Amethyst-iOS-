@@ -382,7 +382,6 @@ static GameSurfaceView* pojavWindow;
     BOOL vulkanNative = ame_renderer_is_vulkan_native(renderer) || AMVulkanNativeActive();
     BOOL scaledByLayer = ame_renderer_uses_angle(renderer) || vulkanNative;
     self.surfaceView.layer.contentsScale = scaledByLayer ? self.screenScale * resolutionScale : self.screenScale;
-
     physicalWidth = roundf(self.surfaceView.frame.size.width * self.screenScale);
     physicalHeight = roundf(self.surfaceView.frame.size.height * self.screenScale);
 
