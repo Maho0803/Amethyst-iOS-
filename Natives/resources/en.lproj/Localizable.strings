@@ -208,6 +208,8 @@
 
 "preference.title.mobilegl_relaxed" = "MobileGL: relaxed OpenGL rules";
 "preference.detail.mobilegl_relaxed" = "Skips some of the strict core profile checks. Turn on if an older mod crashes or draws nothing. MobileGL only.";
+"preference.title.mobileglues_fsr1" = "MobileGlues: FSR1 upscaling";
+"preference.detail.mobileglues_fsr1" = "0 = off, 1 to 4 = Ultra Quality, Quality, Balanced, Performance. Renders at a lower resolution and upscales the image to take load off the GPU. MobileGlues only.";
 "preference.title.moltenvk_fast_math" = "MoltenVK: fast math";
 "preference.detail.moltenvk_fast_math" = "Speeds up shader math on the GPU. Turn off if the game shows wrong colors or flickering textures.";
 "preference.title.moltenvk_argument_buffers" = "MoltenVK: argument buffers";
