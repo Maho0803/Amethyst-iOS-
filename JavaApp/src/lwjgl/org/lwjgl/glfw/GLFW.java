@@ -1269,15 +1269,12 @@ public class GLFW
     public static void glfwWaitEvents() {}
 
     public static void glfwWaitEventsTimeout(double timeout) {
-        // Boardwalk: this isn't how you do a frame limiter, but oh well
-        // System.out.println("Frame limiter");
-        /*
-            try {
-                Thread.sleep((long)(timeout * 1000));
-            } catch (InterruptedException ie) {
-            }
-        */
-        // System.out.println("Out of the frame limiter");
+        // Minecraft's FPS limiter loops on this call until its target time is reached. As a no-op it turned
+        // into a busy loop that kept a core at 100%, so sleep here instead. Sleep only 85% of the wait
+        // (capped at 50 ms); the limiter's loop calls again with the remainder, so the pacing stays accurate.
+        if (timeout > 0d) {
+            java.util.concurrent.locks.LockSupport.parkNanos((long) (Math.min(timeout, 0.05d) * 0.85d * 1.0e9d));
+        }
     }
 
     public static void glfwPostEmptyEvent() {}
