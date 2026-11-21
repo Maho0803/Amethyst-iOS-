@@ -541,6 +541,18 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
         }
     }
 
+    // Cooler defaults: fewer threads for the JIT and GC. They go before the user's custom flags, so any
+    // of these can be overridden from the profile's JVM arguments (the last -XX occurrence wins).
+    {
+        NSInteger cores = NSProcessInfo.processInfo.activeProcessorCount;
+        if (cores > 4) {
+            margv[++margc] = "-XX:ActiveProcessorCount=4";
+        }
+        margv[++margc] = "-XX:CICompilerCount=2";
+        margv[++margc] = "-XX:ParallelGCThreads=2";
+        NSLog(@"[JavaLauncher] Cool JVM defaults added (cores=%ld)", (long)cores);
+    }
+
     init_loadCustomJvmFlags(&margc, (const char **)margv);
     NSLog(@"[Init] Found JLI lib");
 

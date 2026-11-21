@@ -62,6 +62,10 @@ static GameSurfaceView* pojavWindow;
 @property(nonatomic) UIImpactFeedbackGenerator *lightHaptic;
 @property(nonatomic) UIImpactFeedbackGenerator *mediumHaptic;
 
+// Thermal governor: the frame link whose rate range is lowered when the device heats up
+@property(nonatomic) CADisplayLink *frameLink;
+@property(nonatomic) id thermalObserver, powerObserver;
+
 @end
 
 @implementation SurfaceViewController
@@ -70,6 +74,46 @@ static GameSurfaceView* pojavWindow;
     self = [super init];
     self.metadata = metadata;
     return self;
+}
+
+// Picks the display link rate range from the user's preference, then lowers it with the
+// thermal state / Low Power Mode so the GPU and compositor do less work when the phone is hot.
+- (void)applyThermalFrameRate
+{
+    if (!self.frameLink) return;
+    if (@available(iOS 15.0, tvOS 15.0, *)) {
+        CAFrameRateRange range = getPrefBool(@"video.max_framerate") ?
+            CAFrameRateRangeMake(60, 120, 120) : CAFrameRateRangeMake(60, 60, 60);
+
+        NSProcessInfo *info = NSProcessInfo.processInfo;
+        switch (info.thermalState) {
+            case NSProcessInfoThermalStateFair:
+                range = CAFrameRateRangeMake(60, 60, 60); // drop the 120 Hz option
+                break;
+            case NSProcessInfoThermalStateSerious:
+                range = CAFrameRateRangeMake(30, 60, 40);
+                break;
+            case NSProcessInfoThermalStateCritical:
+                range = CAFrameRateRangeMake(24, 30, 30);
+                break;
+            default:
+                if (info.lowPowerModeEnabled && range.maximum > 60) {
+                    range = CAFrameRateRangeMake(60, 60, 60);
+                }
+                break;
+        }
+        self.frameLink.preferredFrameRateRange = range;
+        NSLog(@"[Thermal] state=%ld lowPower=%d -> frame rate %.0f-%.0f (preferred %.0f)",
+              (long)info.thermalState, info.lowPowerModeEnabled,
+              range.minimum, range.maximum, range.preferred);
+    }
+}
+
+- (void)dealloc
+{
+    if (self.thermalObserver) [NSNotificationCenter.defaultCenter removeObserver:self.thermalObserver];
+    if (self.powerObserver) [NSNotificationCenter.defaultCenter removeObserver:self.powerObserver];
+    [self.frameLink invalidate];
 }
 
 - (void)viewDidLoad
@@ -98,14 +142,21 @@ static GameSurfaceView* pojavWindow;
         [ControllerInput tick];
     };
     CADisplayLink *displayLink = [CADisplayLink displayLinkWithTarget:tickInput selector:@selector(invoke)];
-    if (@available(iOS 15.0, tvOS 15.0, *)) {
-        if(getPrefBool(@"video.max_framerate")) {
-            displayLink.preferredFrameRateRange = CAFrameRateRangeMake(60, 120, 120);
-        } else {
-            displayLink.preferredFrameRateRange = CAFrameRateRangeMake(60, 60, 60);
-        }
-    }
+    self.frameLink = displayLink;
+    [self applyThermalFrameRate];
     [displayLink addToRunLoop:NSRunLoop.currentRunLoop forMode:NSRunLoopCommonModes];
+
+    // Lower the frame rate range when the device heats up or Low Power Mode is on
+    __weak typeof(self) weakSelf = self;
+    void (^reapply)(NSNotification *) = ^(NSNotification *n) {
+        dispatch_async(dispatch_get_main_queue(), ^{ [weakSelf applyThermalFrameRate]; });
+    };
+    self.thermalObserver = [NSNotificationCenter.defaultCenter
+        addObserverForName:NSProcessInfoThermalStateDidChangeNotification
+        object:nil queue:nil usingBlock:reapply];
+    self.powerObserver = [NSNotificationCenter.defaultCenter
+        addObserverForName:NSProcessInfoPowerStateDidChangeNotification
+        object:nil queue:nil usingBlock:reapply];
 
     CGFloat screenScale = UIScreen.mainScreen.scale;
 
