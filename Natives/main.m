@@ -163,6 +163,7 @@ void init_redirectStdio() {
     /* create the logging thread */
     dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
         static BOOL filteredSessionID;
+        static CFAbsoluteTime lastLogSync;
         ssize_t rsize;
         char buf[2048];
         while((rsize = read(pfd[0], buf, sizeof(buf)-1)) > 0) {
@@ -183,8 +184,14 @@ void init_redirectStdio() {
             if (canAppendToLog) {
                 [PLLogOutputView appendToLog:@(buf)];
             }
+            // writeData: goes straight to the kernel, so the log survives an app crash on its own.
+            // fsync on every chunk is costly when mods spam the log, so only do it every few seconds.
             [file writeData:[NSData dataWithBytes:buf length:rsize]];
-            [file synchronizeFile];
+            CFAbsoluteTime now = CFAbsoluteTimeGetCurrent();
+            if (now - lastLogSync > 5.0) {
+                [file synchronizeFile];
+                lastLogSync = now;
+            }
         }
         [file closeFile];
     });
