@@ -20,8 +20,8 @@ LWJGL_MANIFEST := $(SOURCEDIR)/Natives/resources/lwjgl_versions.txt
 LWJGL_PAIRS := $(shell awk '/^[ \t]*\#/ {next} NF {print $$1 ":" $$2}' $(LWJGL_MANIFEST))
 LWJGL_SUBS  := $(foreach p,$(LWJGL_PAIRS),$(word 2,$(subst :, ,$(p))))
 
-# Release vs Debug
-RELEASE ?= 0
+# Release vs Debug (Release compiles the native code with optimizations; pass RELEASE=0 for a Debug build)
+RELEASE ?= 1
 
 # Check if running on github runner
 RUNNER ?= 0
