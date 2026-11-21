@@ -160,8 +160,8 @@ void init_redirectStdio() {
     dup2(pfd[1], fileno(stdout));
     dup2(pfd[1], fileno(stderr));
 
-    /* create the logging thread */
-    dispatch_async(dispatch_get_global_queue(DISPATCH_QUEUE_PRIORITY_DEFAULT, 0), ^{
+    /* create the logging thread (utility QoS: it only moves text around, so keep it off the performance cores) */
+    dispatch_async(dispatch_get_global_queue(QOS_CLASS_UTILITY, 0), ^{
         static BOOL filteredSessionID;
         static CFAbsoluteTime lastLogSync;
         ssize_t rsize;
