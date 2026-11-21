@@ -281,6 +281,7 @@ int launchJVM(NSString *username, id launchTarget, int width, int height, int mi
             NSString *mgDir = [NSString stringWithFormat:@"%s/mobileglues", getenv("AME_HOME")];
             [NSFileManager.defaultManager createDirectoryAtPath:mgDir withIntermediateDirectories:YES attributes:nil error:nil];
             setenv("MG_DIR_PATH", mgDir.UTF8String, 1);
+            [MobileGLConfig applyMobileGluesConfigInDirectory:mgDir];
         }
 
         // Setup gameDir

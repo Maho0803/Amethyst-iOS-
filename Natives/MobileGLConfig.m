@@ -38,4 +38,32 @@ static NSArray<NSArray<NSString *> *> *envTable(void) {
     return [vars componentsJoinedByString:@" "];
 }
 
++ (void)applyMobileGluesConfigInDirectory:(NSString *)dir {
+    NSString *path = [dir stringByAppendingPathComponent:@"config.json"];
+
+    // Merge into whatever is already there, so keys MobileGlues manages itself are kept
+    NSMutableDictionary *config = nil;
+    NSData *data = [NSData dataWithContentsOfFile:path];
+    if (data) {
+        id obj = [NSJSONSerialization JSONObjectWithData:data options:NSJSONReadingMutableContainers error:nil];
+        if ([obj isKindOfClass:NSMutableDictionary.class]) config = obj;
+    }
+
+    // 0 = off, 1-4 = Ultra Quality, Quality, Balanced, Performance
+    NSInteger fsr = MAX(0, MIN(4, getPrefInt(@"video.mobileglues_fsr1")));
+
+    // Nothing set and no file yet: leave MobileGlues on its own defaults
+    if (!config && fsr == 0) return;
+    if (!config) config = [NSMutableDictionary new];
+    if (config[@"fsr1Setting"] && [config[@"fsr1Setting"] integerValue] == fsr) return;
+
+    config[@"fsr1Setting"] = @(fsr);
+    NSData *out = [NSJSONSerialization dataWithJSONObject:config options:NSJSONWritingPrettyPrinted error:nil];
+    if ([out writeToFile:path atomically:YES]) {
+        NSLog(@"[MobileGluesConfig] fsr1Setting = %ld", (long)fsr);
+    } else {
+        NSLog(@"[MobileGluesConfig] could not write %@", path);
+    }
+}
+
 @end

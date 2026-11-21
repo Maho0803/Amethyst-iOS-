@@ -208,6 +208,14 @@
               @"type": self.typeSwitch,
               @"enableCondition": whenNotInGame
             },
+            @{@"key": @"mobileglues_fsr1",
+              @"hasDetail": @YES,
+              @"icon": @"arrow.up.forward.square",
+              @"type": self.typeSlider,
+              @"min": @(0),
+              @"max": @(4),
+              @"enableCondition": whenNotInGame
+            },
             @{@"key": @"moltenvk_fast_math",
               @"hasDetail": @YES,
               @"icon": @"bolt",

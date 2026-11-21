@@ -25,6 +25,7 @@
             @"mobilegl_fast_shader_load": @NO,
             @"mobilegl_buffer_compat": @NO,
             @"mobilegl_relaxed": @NO,
+            @"mobileglues_fsr1": @(0),
             @"moltenvk_fast_math": @YES,
             @"moltenvk_argument_buffers": @YES,
             @"moltenvk_smooth_scaling": @NO,
