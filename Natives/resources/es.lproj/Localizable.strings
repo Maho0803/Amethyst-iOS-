@@ -234,6 +234,8 @@
 "preference.detail.mobilegl_buffer_compat" = "Para mods que escriben en buffers asignados sin vaciarlos (Flywheel, Create). Actívelo si sus modelos faltan o parpadean. Sólo móvilGL.";
 "preference.title.mobilegl_relaxed" = "MobileGL: reglas OpenGL relajadas";
 "preference.detail.mobilegl_relaxed" = "Omite algunas de las estrictas comprobaciones principales del perfil. Actívelo si un mod anterior falla o no genera nada. Sólo móvilGL.";
+"preference.title.mobileglues_fsr1" = "MobileGlues: reescalado FSR1";
+"preference.detail.mobileglues_fsr1" = "0 = apagado, 1 a 4 = Ultra calidad, Calidad, Equilibrado, Rendimiento. Dibuja a menor resolución y reescala la imagen para quitarle carga a la GPU. Solo MobileGlues.";
 "preference.title.moltenvk_fast_math" = "MoltenVK: matemáticas rápidas";
 "preference.detail.moltenvk_fast_math" = "Acelera las matemáticas del sombreador en la GPU. Desactívalo si el juego muestra colores incorrectos o texturas parpadeantes.";
 "preference.title.moltenvk_argument_buffers" = "MoltenVK: buffers de argumentos";
