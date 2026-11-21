@@ -52,6 +52,10 @@ static NSArray<NSArray<NSString *> *> *envTable(void) {
     // 0 = off, 1-4 = Ultra Quality, Quality, Balanced, Performance
     NSInteger fsr = MAX(0, MIN(4, getPrefInt(@"video.mobileglues_fsr1")));
 
+    // Always log what was read, so a missing or ignored setting can be told apart in latestlog.txt
+    NSLog(@"[MobileGluesConfig] dir=%@ slider=%ld existingFile=%d existingFsr=%@",
+          dir, (long)fsr, config != nil, config[@"fsr1Setting"] ?: @"(none)");
+
     // Nothing set and no file yet: leave MobileGlues on its own defaults
     if (!config && fsr == 0) return;
     if (!config) config = [NSMutableDictionary new];
