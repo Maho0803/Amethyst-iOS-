@@ -267,6 +267,31 @@ def log_to_stderr(root):
     return replace_once(target, old, new, "MOBILEGL_LOG_CONSOLE", "log_to_stderr", required=False)
 
 
+def qualify_definitions(root):
+    # glGetAttachedObjectsARB in GLImpl/Exporting/Definitions.cpp spells Vector and SizeT without
+    # the MobileGL:: prefix, and in this build nothing brings those names into scope there. Qualify
+    # them so the file compiles. Harmless if upstream already did.
+    target = root / "MobileGL/MG_Impl/GLImpl/Exporting/Definitions.cpp"
+    if not target.is_file():
+        print(f"[qualify_definitions] {target} not found, nothing to do")
+        return SKIPPED
+    text = read(target)
+    old_a = "Vector<GLuint> names(maxCount > 0 ? static_cast<SizeT>(maxCount) : 0);"
+    new_a = "MobileGL::Vector<GLuint> names(maxCount > 0 ? static_cast<MobileGL::SizeT>(maxCount) : 0);"
+    old_b = "names[static_cast<SizeT>(i)]"
+    new_b = "names[static_cast<MobileGL::SizeT>(i)]"
+    if old_a not in text and old_b not in text:
+        print("[qualify_definitions] already qualified or changed upstream, not touching it")
+        return SKIPPED
+    n_a, n_b = text.count(old_a), text.count(old_b)
+    if n_a != 1 or n_b != 1:
+        print(f"[qualify_definitions] expected one of each line, found {n_a} and {n_b}; not touching it", file=sys.stderr)
+        return WARNED
+    write(target, text.replace(old_a, new_a, 1).replace(old_b, new_b, 1))
+    print("[qualify_definitions] applied")
+    return APPLIED
+
+
 STEPS = [
     ("ios_visibility", ios_visibility, True),
     ("ios_resolution", ios_resolution, True),
@@ -274,6 +299,7 @@ STEPS = [
     ("enable_availability", enable_availability, True),
     ("glslang", glslang, False),
     ("log_to_stderr", log_to_stderr, False),
+    ("qualify_definitions", qualify_definitions, False),
 ]
 
 
