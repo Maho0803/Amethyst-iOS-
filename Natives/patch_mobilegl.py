@@ -37,10 +37,7 @@ def replace_once(path, old, new, marker, label, required=True):
 
 
 def ios_visibility(root):
-    old = """if (APPLE AND MOBILEGL_IOS)
-    target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC MOBILEGL_IOS=1 _LIBCPP_DISABLE_AVAILABILITY)"""
-    new = """if (APPLE AND MOBILEGL_IOS)
-    target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC MOBILEGL_IOS=1 _LIBCPP_DISABLE_AVAILABILITY)
+    exported = """
 
     set(MOBILEGL_IOS_EXPORTED_SYMBOLS
         "${CMAKE_CURRENT_SOURCE_DIR}/MobileGL/MG_Impl/DyldInterpose/ExportedSymbols.txt")
@@ -48,7 +45,28 @@ def ios_visibility(root):
         "LINKER:-exported_symbols_list,${MOBILEGL_IOS_EXPORTED_SYMBOLS}")
     set_property(TARGET ${CMAKE_PROJECT_NAME} APPEND PROPERTY
         LINK_DEPENDS "${MOBILEGL_IOS_EXPORTED_SYMBOLS}")"""
-    return replace_once(root / "CMakeLists.txt", old, new, "MOBILEGL_IOS_EXPORTED_SYMBOLS", "ios_visibility")
+    # newest layout first (module targets, one shared interface target), then the older one
+    candidates = [
+        """if (APPLE AND MOBILEGL_IOS)
+    target_compile_definitions(mgl_build_iface INTERFACE MOBILEGL_IOS=1 _LIBCPP_DISABLE_AVAILABILITY)""",
+        """if (APPLE AND MOBILEGL_IOS)
+    target_compile_definitions(${CMAKE_PROJECT_NAME} PUBLIC MOBILEGL_IOS=1 _LIBCPP_DISABLE_AVAILABILITY)""",
+    ]
+    target = root / "CMakeLists.txt"
+    if not target.is_file():
+        print(f"[ios_visibility] {target} not found", file=sys.stderr)
+        return FAILED
+    text = read(target)
+    if "MOBILEGL_IOS_EXPORTED_SYMBOLS" in text:
+        print("[ios_visibility] already applied")
+        return SKIPPED
+    for old in candidates:
+        if text.count(old) == 1:
+            write(target, text.replace(old, old + exported, 1))
+            print("[ios_visibility] applied")
+            return APPLIED
+    print("[ios_visibility] no known iOS block found in CMakeLists.txt, not touching it", file=sys.stderr)
+    return FAILED
 
 
 def ios_resolution(root):
@@ -83,8 +101,25 @@ def ios_resolution(root):
 
         VkImageBlit blitRegion{};
         blitRegion.srcSubresource.aspectMask = srcBinding.aspectMask;"""
-    target = root / "MobileGL/MG_Backend/DirectVulkan/Renderer/VulkanRenderer.cpp"
-    return replace_once(target, old, new, "isFullscreenScaledBlit", "ios_resolution")
+    renderer_dir = root / "MobileGL/MG_Backend/DirectVulkan/Renderer"
+    marker = "isFullscreenScaledBlit"
+    files = sorted(renderer_dir.glob("*.cpp")) if renderer_dir.is_dir() else []
+    texts = {p: read(p) for p in files}
+
+    if any(marker in t for t in texts.values()):
+        print("[ios_resolution] already applied")
+        return SKIPPED
+
+    holders = [p for p, t in texts.items() if t.count(old) == 1]
+    if len(holders) == 1:
+        write(holders[0], texts[holders[0]].replace(old, new, 1))
+        print(f"[ios_resolution] applied in {holders[0].name}")
+        return APPLIED
+
+    blit_files = [p.name for p, t in texts.items() if "VkImageBlit" in t]
+    print(f"[ios_resolution] expected block found in {len(holders)} renderer files, not touching anything. "
+          f"Files that mention VkImageBlit: {', '.join(blit_files) or 'none'}", file=sys.stderr)
+    return FAILED
 
 
 def hash_shim(root):
@@ -135,7 +170,8 @@ def enable_availability(root):
         print("[enable_availability] already applied")
         return SKIPPED
     pattern = re.compile(
-        r"(target_compile_definitions\(\$\{CMAKE_PROJECT_NAME\}(?:_s)? PUBLIC MOBILEGL_IOS=1) _LIBCPP_DISABLE_AVAILABILITY(\))")
+        r"(target_compile_definitions\((?:\$\{CMAKE_PROJECT_NAME\}(?:_s)?|mgl_build_iface) "
+        r"(?:PUBLIC|INTERFACE) MOBILEGL_IOS=1) _LIBCPP_DISABLE_AVAILABILITY(\))")
     text, count = pattern.subn(r"\1\2", text)
     if count == 0:
         print("[enable_availability] pattern not found, CMakeLists.txt changed upstream", file=sys.stderr)
