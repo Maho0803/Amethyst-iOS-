@@ -69,6 +69,7 @@ static GameSurfaceView* pojavWindow;
 // Geometry sync: view size / renderer the surface was last sized for
 @property(nonatomic) CGSize lastSyncedSize;
 @property(nonatomic) NSString *lastSyncedRenderer;
+@property(nonatomic) BOOL minecraftLaunched;
 
 @end
 
@@ -330,14 +331,34 @@ static GameSurfaceView* pojavWindow;
           NSStringFromCGSize(self.view.bounds.size), NSStringFromCGRect(self.view.frame),
           NSStringFromCGRect(self.touchView.frame), NSStringFromCGRect(self.surfaceView.frame));
 
-    [self launchMinecraft];
+    // The JVM is started from launchMinecraftIfReady: once the view is landscape (first layout /
+    // after the rotation); this timer is only a fallback so the game always starts.
+    __weak typeof(self) weakLaunchSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(4.0 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [weakLaunchSelf launchMinecraftIfReady:YES];
+    });
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self setNeedsUpdateOfPrefersPointerLocked];
     NSLog(@"[Resolution] viewDidAppear: view.bounds=%@", NSStringFromCGSize(self.view.bounds.size));
+#if !TARGET_OS_TV
+    // On iPhone the game is landscape-only (the launcher can stay portrait): ask the scene to rotate
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
+        if (@available(iOS 16.0, *)) {
+            [self setNeedsUpdateOfSupportedInterfaceOrientations];
+            UIWindowScene *scene = self.view.window.windowScene;
+            UIWindowSceneGeometryPreferencesIOS *prefs = [[UIWindowSceneGeometryPreferencesIOS alloc]
+                initWithInterfaceOrientations:UIInterfaceOrientationMaskLandscape];
+            [scene requestGeometryUpdateWithPreferences:prefs errorHandler:^(NSError *error) {
+                NSLog(@"[Orientation] requestGeometryUpdate failed: %@", error);
+            }];
+        }
+    }
+#endif
     [self syncSurfaceGeometry];
+    [self launchMinecraftIfReady:NO];
 }
 
 - (void)updateAudioSettings {
@@ -595,6 +616,49 @@ self.surfaceView.layer.contentsScale = targetScale;
 {
     [super viewDidLayoutSubviews];
     [self syncSurfaceGeometry];
+    [self launchMinecraftIfReady:NO];
+}
+
+#pragma mark - Orientation (game is landscape on iPhone)
+
+- (UIInterfaceOrientationMask)supportedInterfaceOrientations
+{
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
+        return UIInterfaceOrientationMaskLandscape;
+    }
+    return UIInterfaceOrientationMaskAll;
+}
+
+- (BOOL)shouldAutorotate
+{
+    return YES;
+}
+
+- (UIInterfaceOrientation)preferredInterfaceOrientationForPresentation
+{
+    if (UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone) {
+        return UIInterfaceOrientationLandscapeRight;
+    }
+    return UIInterfaceOrientationPortrait;
+}
+
+// Starts the JVM only when the view is landscape (on iPhone), so the window size passed to
+// Minecraft/Forge's early display is never the portrait one. `force` is the 4 s fallback.
+- (void)launchMinecraftIfReady:(BOOL)force
+{
+    if (self.minecraftLaunched || !self.surfaceView) return;
+    CGSize size = self.view.bounds.size;
+    BOOL phone = UIDevice.currentDevice.userInterfaceIdiom == UIUserInterfaceIdiomPhone;
+    if (!force && (size.width <= 0 || size.height <= 0 || (phone && size.width < size.height))) {
+        return;
+    }
+    self.minecraftLaunched = YES;
+    if (force) {
+        [self syncSurfaceGeometry];
+    }
+    NSLog(@"[Launch] starting JVM (forced=%d) view=%@ window=%ldx%ld",
+          (int)force, NSStringFromCGSize(size), (long)windowWidth, (long)windowHeight);
+    [self launchMinecraft];
 }
 
 // Re-applies the same layout/resolution work as a rotation when the view size or the
