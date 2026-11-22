@@ -66,6 +66,10 @@ static GameSurfaceView* pojavWindow;
 @property(nonatomic) CADisplayLink *frameLink;
 @property(nonatomic) id thermalObserver, powerObserver;
 
+// Geometry sync: view size / renderer the surface was last sized for
+@property(nonatomic) CGSize lastSyncedSize;
+@property(nonatomic) NSString *lastSyncedRenderer;
+
 @end
 
 @implementation SurfaceViewController
@@ -322,12 +326,18 @@ static GameSurfaceView* pojavWindow;
         [self switchToExternalDisplay];
     }
 
+    NSLog(@"[Resolution] viewDidLoad: view.bounds=%@ view.frame=%@ touchView=%@ surfaceView=%@",
+          NSStringFromCGSize(self.view.bounds.size), NSStringFromCGRect(self.view.frame),
+          NSStringFromCGRect(self.touchView.frame), NSStringFromCGRect(self.surfaceView.frame));
+
     [self launchMinecraft];
 }
 
 - (void)viewDidAppear:(BOOL)animated {
     [super viewDidAppear:animated];
     [self setNeedsUpdateOfPrefersPointerLocked];
+    NSLog(@"[Resolution] viewDidAppear: view.bounds=%@", NSStringFromCGSize(self.view.bounds.size));
+    [self syncSurfaceGeometry];
 }
 
 - (void)updateAudioSettings {
@@ -470,6 +480,13 @@ self.surfaceView.layer.contentsScale = targetScale;
 
     // Tell Minecraft/MobileGL about the internal render resolution.
     CallbackBridge_nativeSendScreenSize(windowWidth, windowHeight);
+
+    const char *rendererEnv = getenv("AME_RENDERER");
+    self.lastSyncedRenderer = rendererEnv ? @(rendererEnv) : @"";
+    NSLog(@"[Resolution] AME_RENDERER=%s scaledByLayer=%d contentsScale=%.3f screenScale=%.1f resScale=%.2f surface=%@ super=%@ -> window %ldx%ld",
+          rendererEnv ?: "(nil)", (int)scaledByLayer, (double)targetScale, (double)self.screenScale,
+          (double)resolutionScale, NSStringFromCGRect(self.surfaceView.frame),
+          NSStringFromCGRect(self.surfaceView.superview.frame), (long)windowWidth, (long)windowHeight);
 }
 
 - (void)updateControlHiddenState:(BOOL)hide {
@@ -520,6 +537,8 @@ self.surfaceView.layer.contentsScale = targetScale;
             minVersion
         );
     });
+    // AME_RENDERER is set once the launcher thread starts; recompute the resolution when it appears
+    [self resyncWhenRendererKnown:0];
 }
 
 - (void)loadCustomControls {
@@ -568,6 +587,64 @@ self.surfaceView.layer.contentsScale = targetScale;
         menuButton.showsMenuAsPrimaryAction = YES;
         self.edgeGesture.enabled = NO;
     }
+}
+
+#pragma mark - Surface geometry sync
+
+- (void)viewDidLayoutSubviews
+{
+    [super viewDidLayoutSubviews];
+    [self syncSurfaceGeometry];
+}
+
+// Re-applies the same layout/resolution work as a rotation when the view size or the
+// renderer changed since the last sync (viewDidLoad runs before the final geometry exists
+// and before AME_RENDERER is set, so the first computation can be stale).
+- (void)syncSurfaceGeometry
+{
+    if (!self.touchView || !self.surfaceView) return;
+    CGSize size = self.view.bounds.size;
+    if (size.width <= 0 || size.height <= 0) return;
+
+    const char *rendererEnv = getenv("AME_RENDERER");
+    NSString *rendererName = rendererEnv ? @(rendererEnv) : @"";
+    BOOL sizeChanged = !CGSizeEqualToSize(size, self.lastSyncedSize);
+    BOOL rendererChanged = ![rendererName isEqualToString:(self.lastSyncedRenderer ?: @"")];
+    if (!sizeChanged && !rendererChanged) return;
+
+    NSLog(@"[Resolution] sync: sizeChanged=%d rendererChanged=%d size=%@ (last %@) renderer='%@' (last '%@')",
+          (int)sizeChanged, (int)rendererChanged, NSStringFromCGSize(size),
+          NSStringFromCGSize(self.lastSyncedSize), rendererName, self.lastSyncedRenderer ?: @"");
+    self.lastSyncedSize = size;
+
+    self.rootView.bounds = CGRectMake(0, 0, size.width + 30.0, size.height);
+    CGRect frame = self.view.frame;
+    frame.size = size;
+    self.touchView.frame = frame;
+    self.inputTextField.frame = CGRectMake(0, -32.0, size.width, 30.0);
+    [self viewWillTransitionToSize_Navigation:frame];
+    self.ctrlView.frame = getSafeArea(self.view.frame);
+    [self.ctrlView.subviews makeObjectsPerformSelector:@selector(update)];
+    [self updateSavedResolution];
+    [GyroInput updateOrientation];
+}
+
+// Polls (max ~30 s) until the launcher thread has set AME_RENDERER, then re-syncs once.
+- (void)resyncWhenRendererKnown:(int)attempt
+{
+    if (getenv("AME_RENDERER") != NULL) {
+        NSLog(@"[Resolution] AME_RENDERER appeared after %d polls: %s", attempt, getenv("AME_RENDERER"));
+        [self syncSurfaceGeometry];
+        return;
+    }
+    if (attempt >= 120) {
+        NSLog(@"[Resolution] AME_RENDERER never appeared (gave up after 30 s)");
+        return;
+    }
+    __weak typeof(self) weakSelf = self;
+    dispatch_after(dispatch_time(DISPATCH_TIME_NOW, (int64_t)(0.25 * NSEC_PER_SEC)), dispatch_get_main_queue(), ^{
+        [weakSelf resyncWhenRendererKnown:attempt + 1];
+    });
 }
 
 - (void)viewWillTransitionToSize:(CGSize)size withTransitionCoordinator:(id<UIViewControllerTransitionCoordinator>)coordinator
