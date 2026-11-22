@@ -45,6 +45,7 @@ jobs:
           git submodule update --init --recursive
           git -C Natives/external/MobileGL fetch --all --tags
           git -C Natives/external/MobileGL checkout 9df3600
+          git -C Natives/external/MobileGL submodule update --init --recursive
 
       - name: Setup Xcode Version
         uses: maxim-lobanov/setup-xcode@master
