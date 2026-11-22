@@ -70,9 +70,47 @@ def ios_visibility(root):
 
 
 def ios_resolution(root):
-    old = """        VkImageBlit blitRegion{};
+    # Resolution slider: the game renders into a smaller fbo and blits it to the window with a
+    # destination rect of that same smaller size, so it would only fill a corner of the swapchain.
+    # When a color blit to the default framebuffer has equal source/destination sizes that differ
+    # from the swapchain, stretch the destination over the whole swapchain and let the blit scale.
+    marker = "isFullscreenScaledBlit"
+
+    # Newest layout (wire arm): BlitWireFramebuffers(sx0..dy1, mask, filter) in WireFramebuffer.cpp.
+    # The rect parameters are plain by-value GLints, so they can be rewritten before the blit lambda.
+    wire_old = """        if (!read || !draw) MagmaWireFatal("blit-framebuffer-record");
+        state.VerbBlitNamedConsumed = named;
+"""
+    wire_new = wire_old + """        // resolution slider: the source fbo is smaller but the dst rect can end up the same size,
+        // so stretch it over the whole swapchain and let the blit scale it
+        if (draw->IsDefault && !read->IsDefault && (mask & GL_COLOR_BUFFER_BIT) != 0) {
+            const VkExtent2D framebufferExtent = m_swapchainObject.GetExtent();
+            const GLint requestedSrcWidth = std::abs(sx1 - sx0);
+            const GLint requestedSrcHeight = std::abs(sy1 - sy0);
+            const GLint requestedDstWidth = std::abs(dx1 - dx0);
+            const GLint requestedDstHeight = std::abs(dy1 - dy0);
+
+            const Bool isFullscreenScaledBlit =
+                requestedSrcWidth > 0 &&
+                requestedSrcHeight > 0 &&
+                requestedDstWidth == requestedSrcWidth &&
+                requestedDstHeight == requestedSrcHeight &&
+                (requestedDstWidth != static_cast<GLint>(framebufferExtent.width) ||
+                 requestedDstHeight != static_cast<GLint>(framebufferExtent.height));
+
+            if (isFullscreenScaledBlit) {
+                dx0 = 0;
+                dy0 = 0;
+                dx1 = static_cast<GLint>(framebufferExtent.width);
+                dy1 = static_cast<GLint>(framebufferExtent.height);
+            }
+        }
+"""
+
+    # Older layout: the VkImageBlit lived in VulkanRenderer.cpp (pinned commits before the wire split).
+    legacy_old = """        VkImageBlit blitRegion{};
         blitRegion.srcSubresource.aspectMask = srcBinding.aspectMask;"""
-    new = """        // resolution slider: the source fbo is smaller but the dst rect can end up the same size,
+    legacy_new = """        // resolution slider: the source fbo is smaller but the dst rect can end up the same size,
         // so stretch it over the whole swapchain and let the blit scale it
         if (drawIsDefaultFbo) {
             const Int requestedSrcWidth = std::abs(srcX1 - srcX0);
@@ -101,8 +139,8 @@ def ios_resolution(root):
 
         VkImageBlit blitRegion{};
         blitRegion.srcSubresource.aspectMask = srcBinding.aspectMask;"""
+
     renderer_dir = root / "MobileGL/MG_Backend/DirectVulkan/Renderer"
-    marker = "isFullscreenScaledBlit"
     files = sorted(renderer_dir.glob("*.cpp")) if renderer_dir.is_dir() else []
     texts = {p: read(p) for p in files}
 
@@ -110,14 +148,15 @@ def ios_resolution(root):
         print("[ios_resolution] already applied")
         return SKIPPED
 
-    holders = [p for p, t in texts.items() if t.count(old) == 1]
-    if len(holders) == 1:
-        write(holders[0], texts[holders[0]].replace(old, new, 1))
-        print(f"[ios_resolution] applied in {holders[0].name}")
-        return APPLIED
+    for label, old, new in (("wire", wire_old, wire_new), ("legacy", legacy_old, legacy_new)):
+        holders = [p for p, t in texts.items() if t.count(old) == 1]
+        if len(holders) == 1:
+            write(holders[0], texts[holders[0]].replace(old, new, 1))
+            print(f"[ios_resolution] applied ({label} layout) in {holders[0].name}")
+            return APPLIED
 
     blit_files = [p.name for p, t in texts.items() if "VkImageBlit" in t]
-    print(f"[ios_resolution] expected block found in {len(holders)} renderer files, not touching anything. "
+    print("[ios_resolution] neither the wire nor the legacy blit block was found, not touching anything. "
           f"Files that mention VkImageBlit: {', '.join(blit_files) or 'none'}", file=sys.stderr)
     return FAILED
 
